@@ -384,7 +384,16 @@ async function ghMedia(u) {
   const o = await gh(`/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${G.cfg.branch}`, {accept: 'application/vnd.github.object'});
   return o.download_url || '';            // signed link, valid for a few minutes: not cached
 }
-function setMedia(el, u) { if (!GH) { el.src = u; return; } el.dataset.m = u; ghMedia(u).then(s => { if (el.dataset.m === u && s) { el.src = s; el.style.visibility = ''; } }).catch(() => {}); }
+function setMedia(el, u) {
+  if (!GH) { el.src = u; return; }
+  el.dataset.m = u;
+  if (/^(VIDEO|AUDIO)$/.test(el.tagName)) el.onerror = async () => {      // iPhone Safari may refuse the signed link (generic file type): play a typed blob instead
+    if (el.dataset.fb === u) return; el.dataset.fb = u; toast('Loading video…');
+    try { const path = mediaRepoPath(u), x = G.tree.by[path]; const r = await gh(`/git/blobs/${x.sha}`, {accept: 'application/vnd.github.raw', raw: true});
+      const t = el.currentTime; el.src = URL.createObjectURL(new Blob([await r.arrayBuffer()], {type: /\.mp4$/i.test(path) ? 'video/mp4' : /\.wav$/i.test(path) ? 'audio/wav' : 'audio/mpeg'})); el.currentTime = t; } catch(e) { toast('Video load failed: ' + e.message); }
+  };
+  ghMedia(u).then(s => { if (el.dataset.m === u && s) { el.src = s; el.style.visibility = ''; } }).catch(() => {});
+}
 function hydrate() {
   if (!GH) return;
   document.querySelectorAll('[src^="/media/"]').forEach(el => { const u = el.getAttribute('src'); el.removeAttribute('src'); setMedia(el, u); });
