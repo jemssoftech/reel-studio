@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F26A1B">
+<meta name="theme-color" content="#2563EB">
 <title>Reel Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Gujarati:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#f6f4f1; --panel:#ffffff; --panel2:#faf8f5; --line:#e8e2da; --text:#1f1a15; --muted:#7a6f63;
-  --brand:#F26A1B; --brand2:#ffe8d6; --ok:#1f9d55; --okbg:#e3f6ea; --warn:#b7791f; --warnbg:#fdf3dc; --bad:#d64545; --badbg:#fde6e6;
+  --brand:#2563EB; --brand2:#E6EEFF; --ok:#1f9d55; --okbg:#e3f6ea; --warn:#b7791f; --warnbg:#fdf3dc; --bad:#d64545; --badbg:#fde6e6;
   --kaka:#2f6fdb; --kakabg:#e7efff; --jen:#8a3ffc; --jenbg:#f1e8ff; --shadow:0 1px 2px rgba(0,0,0,.05),0 6px 20px rgba(0,0,0,.05);
   --r:14px;
 }
@@ -603,7 +603,12 @@ function viewVoice() {
     ${R.voice ? `<div class="row" style="margin-bottom:10px"><span class="pill ok">✓ ${esc(R.voice)}</span></div><audio controls preload="metadata" src="/media/voice/${encodeURIComponent(R.reel)}?t=${Date.now()}"></audio>` : '<p class="muted">No voice yet.</p>'}
     <div class="drop" id="drop" style="margin-top:14px"><div style="font-size:30px">🎙</div><b>${R.voice ? 'Replace voice' : 'Upload voice'}</b><div class="muted small">Tap to pick from this device, or drop an mp3 / wav here</div>
       <input type="file" id="vf" accept="audio/*,.mp3,.wav,.m4a" style="display:none"></div>
-    <div id="upst" class="muted small" style="margin-top:8px"></div></div>
+    <div id="upst" class="muted small" style="margin-top:8px"></div>
+    <h3 style="margin-top:18px">Hindi version <span class="muted small" style="font-weight:400">(Gujarati + Hindi, every reel)</span></h3>
+    <div class="row" style="flex-wrap:wrap;gap:6px;margin-bottom:8px">${[['tts_gu.json', 'Gujarati JSON'], ['tts_hi.json', 'Hindi JSON'], ['voice_hi', 'Hindi voice']].map(([f, l]) => { const ok = (R.files || []).some(n => n === f || n.startsWith(f + '.')); return `<span class="pill ${ok ? 'ok' : ''}">${ok ? '✓' : '○'} ${l}</span>`; }).join('')}</div>
+    <div class="drop" id="drop2"><div style="font-size:26px">🇮🇳</div><b>Upload Hindi voice + TTS JSON files</b><div class="muted small">Pick one or more: the Hindi mp3 and the Gujarati / Hindi ElevenLabs JSON (sorted automatically by script)</div>
+      <input type="file" id="vf2" multiple accept="audio/*,.mp3,.wav,.m4a,.json,application/json" style="display:none"></div>
+    <div id="upst2" class="muted small" style="margin-top:8px"></div></div>
     <div class="stick card pad"><h3>Next</h3><p class="muted small" style="margin-top:0">The old voice (if any) goes to Trash. Saved as <code>${esc(R.dir)}/voice.mp3</code>; the build computes timing from it.</p>
       <button class="btn p" style="width:100%;justify-content:center" ${R.voice ? '' : 'disabled'} onclick="setStep('build')">Next: build settings →</button></div></div>`;
 }
@@ -612,6 +617,37 @@ function initDrop() {
   d.onclick = () => f.click(); f.onchange = () => f.files[0] && upload(f.files[0]);
   d.ondragover = e => { e.preventDefault(); d.classList.add('hot'); }; d.ondragleave = () => d.classList.remove('hot');
   d.ondrop = e => { e.preventDefault(); d.classList.remove('hot'); e.dataTransfer.files[0] && upload(e.dataTransfer.files[0]); };
+  const d2 = $('#drop2'), f2 = $('#vf2'); if (!d2) return;
+  d2.onclick = () => f2.click(); f2.onchange = () => f2.files.length && uploadInputs([...f2.files]);
+  d2.ondragover = e => { e.preventDefault(); d2.classList.add('hot'); }; d2.ondragleave = () => d2.classList.remove('hot');
+  d2.ondrop = e => { e.preventDefault(); d2.classList.remove('hot'); e.dataTransfer.files.length && uploadInputs([...e.dataTransfer.files]); };
+}
+// Hindi inputs (user 2026-11-22): audio -> voice_hi.<ext>; JSON -> tts_hi.json (Devanagari) or tts_gu.json (Gujarati)
+async function slotOf(file) {
+  if (/\.(mp3|wav|m4a)$/i.test(file.name) || /^audio\//.test(file.type)) return 'voice_hi' + (/\.wav$/i.test(file.name) ? '.wav' : /\.m4a$/i.test(file.name) ? '.m4a' : '.mp3');
+  const t = await file.text(); JSON.parse(t);
+  if (/[\u0900-\u097F]/.test(t)) return 'tts_hi.json';
+  if (/[\u0A80-\u0AFF]/.test(t)) return 'tts_gu.json';
+  throw new Error(`${file.name}: no Gujarati or Hindi text inside`);
+}
+async function uploadInputs(files) {
+  const st = $('#upst2'); const msgs = [];
+  try {
+    for (const file of files) {
+      const slot = await slotOf(file); st.textContent = `Uploading ${file.name} as ${slot}…`;
+      if (GH) {
+        await ghTree(true); const dir = rawDirOf(S.reel.reel); const ch = [];
+        if (slot.startsWith('voice_hi')) for (const n of children(dir).filter(n => /^voice_hi\./.test(n) && n !== slot)) ch.push({path: `${dir}/${n}`, del: true});
+        if (slot.endsWith('.json')) ch.push({path: `${dir}/${slot}`, text: await file.text()});
+        else { const buf = new Uint8Array(await file.arrayBuffer()); let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000)); ch.push({path: `${dir}/${slot}`, base64: btoa(bin)}); }
+        await ghCommit(`Reel Studio: ${slot} for ${S.reel.reel}`, ch); msgs.push(`saved ${slot}`);
+      } else {
+        const r = await fetch(`/api/reel/${encodeURIComponent(S.reel.reel)}/input?slot=${encodeURIComponent(slot)}`, {method: 'PUT', body: file});
+        const j = await r.json().catch(() => ({})); if (r.status !== 200) throw new Error(j.error || r.status); msgs.push(j.msg);
+      }
+    }
+    st.textContent = ''; toast(msgs.join('; ')); await refreshReel();
+  } catch (e) { st.textContent = 'Error: ' + e.message; }
 }
 function upload(file) {
   if (GH) { const st = $('#upst'); ghUpload(file, st).then(async j => { toast(j.msg); await refreshReel(); }).catch(e => st.textContent = 'Error: ' + e.message); return; }
