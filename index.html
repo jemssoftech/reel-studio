@@ -244,9 +244,12 @@ async function ghCommit(message, changes) {
   throw new Error('GitHub busy, try again');
 }
 function rawDirOf(reel) { for (const b of ['Raw', 'Raw/_pending']) if (ls(`${b}/${reel}`).length) return `${b}/${reel}`; throw new Error('reel not found: ' + reel); }
+// EXPORTS LAYOUT (user 2026-11-23): Exports/<reel>/<files>; a Hindi reel (<reel>_hi) lives in its Gujarati reel's folder (Tools/scripts/exports.py)
+const expDir = (reel) => `Exports/${reel.replace(/_hi$/, '')}`;
+const expDirOfFile = (f) => { const m = f.match(/^(.+?)(?:_hi)?_(?:v\d+.*|cover.*|post\.md)$/); return m ? `Exports/${m[1]}` : 'Exports'; };
 function verList(reel) {
   const out = [];
-  for (const x of ls('Exports')) { const m = x.path.slice(8).match(new RegExp(`^${reel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(v(\\d+))\\.mp4$`)); if (m) out.push({name: m[1], n: +m[2], file: x.path.slice(8), size: x.size, mtime: 0, frames: ls(`Studio/${reel}/ui_frames/${m[1]}`).filter(f => f.path.endsWith('.jpg')).length}); }
+  for (const x of ls(expDir(reel))) { const fn = x.path.split('/').pop(); const m = fn.match(new RegExp(`^${reel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(v(\\d+))\\.mp4$`)); if (m) out.push({name: m[1], n: +m[2], file: fn, size: x.size, mtime: 0, frames: ls(`Studio/${reel}/ui_frames/${m[1]}`).filter(f => f.path.endsWith('.jpg')).length}); }
   return out.sort((a, b) => a.n - b.n);
 }
 async function ghRuns() {
@@ -368,7 +371,7 @@ async function ghUpload(file, st) {
 // media: /media/... URLs -> repo files (images as blobs, video/audio as short-lived download links)
 function mediaRepoPath(u) {
   const p = u.split('?')[0].split('/').slice(2).map(decodeURIComponent);
-  if (p[0] === 'export') return `Exports/${p[1]}`;
+  if (p[0] === 'export') return `${expDirOfFile(p[1])}/${p[1]}`;
   if (p[0] === 'approved') return `Approved Videos/${p[1]}`;
   if (p[0] === 'frame') return `Studio/${p[1]}/ui_frames/${p[2]}/${p[3]}`;
   if (p[0] === 'voice') { const dir = rawDirOf(p[1]); const v = children(dir).find(n => VOICE_RE.test(n)); return v && `${dir}/${v}`; }
@@ -682,7 +685,7 @@ function viewBuild() {
       <label class="f">New random outfit<span class="h">re-roll even if this reel had one</span>${sel('b_rr', [['0', 'No (keep previous pick)'], ['1', 'Yes, re-roll']], s.reroll_outfit ? '1' : '0')}</label>
     </div>
     <label class="f" style="margin-top:12px">Extra wishes for the AI (optional)<textarea class="in" id="b_notes" rows="2" placeholder="e.g. hook ma vadhu zoom, CTA par confetti…">${esc(s.notes)}</textarea></label>
-    <div class="row" style="margin-top:16px"><span class="muted small">${blocked || `Output: Exports/${esc(R.reel)}_v${(R.versions.length ? R.versions[R.versions.length - 1].n : 0) + 1}.mp4 · then 1 FPS frames are made automatically`}</span><span class="sp"></span>
+    <div class="row" style="margin-top:16px"><span class="muted small">${blocked || `Output: ${expDir(R.reel)}/${esc(R.reel)}_v${(R.versions.length ? R.versions[R.versions.length - 1].n : 0) + 1}.mp4 · then 1 FPS frames are made automatically`}</span><span class="sp"></span>
       <button class="btn" onclick="saveSettings()">Save settings</button>
       <button class="btn p" ${blocked ? 'disabled' : ''} onclick="startBuild()">Confirm & Generate ▶</button></div></div>
     ${histHtml()}`;
